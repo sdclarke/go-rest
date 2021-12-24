@@ -11,6 +11,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/gorilla/mux"
 )
 
 type fileInfo struct {
@@ -107,6 +109,7 @@ func (h *handler) handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	r := mux.NewRouter()
 	templates, err := template.New("templates").ParseGlob("templates/*")
 	if err != nil {
 		log.Fatalf("Error: %v", err)
@@ -114,7 +117,7 @@ func main() {
 	h := &handler{
 		templates,
 	}
-	http.HandleFunc("/", h.handle)
-	go func() { log.Fatal(http.ListenAndServe(":8080", nil)) }()
+	r.PathPrefix("/").HandlerFunc(h.handle)
+	go func() { log.Fatal(http.ListenAndServe(":8080", r)) }()
 	select {}
 }
