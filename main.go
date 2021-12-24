@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"html"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -12,7 +13,27 @@ import (
 	"strings"
 )
 
-func handle(w http.ResponseWriter, r *http.Request) {
+type fileInfo struct {
+	os.FileInfo
+	url url.URL
+}
+
+func (f *fileInfo) FixedName() string {
+	if f.IsDir() {
+		return fmt.Sprintf("%s/", f.Name())
+	}
+	return f.Name()
+}
+
+func (f *fileInfo) Url() string {
+	return f.url.String()
+}
+
+type handler struct {
+	templates *template.Template
+}
+
+func (h *handler) handle(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 		defer r.Body.Close()
@@ -37,29 +58,33 @@ func handle(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
-			fmt.Fprintf(w, "<table>")
-			fmt.Fprintf(w, "<tr><td><a href=\"..\">..</a></td></tr>")
-			sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
-			for _, dirFile := range files {
-				name := dirFile.Name()
+			sort.Slice(files, func(i, j int) bool {
+				if files[i].IsDir() && !files[j].IsDir() {
+					return true
+				} else if !files[i].IsDir() && files[j].IsDir() {
+					return false
+				}
+				return files[i].Name() < files[j].Name()
+			})
+			fileInfos := []*fileInfo{}
+			for _, info := range files {
+				name := info.Name()
 				if strings.HasPrefix(name, ".") && r.URL.Query().Get("showHidden") != "true" {
 					continue
 				}
-				fmt.Fprintf(w, "<tr>")
-				fmt.Fprintf(w, "<td>%6d</td>", dirFile.Size())
-				if dirFile.IsDir() {
+				if info.IsDir() {
 					name = fmt.Sprintf("%s/", name)
 				}
-				url := url.URL{Path: name}
-				if path == "/" {
-					fmt.Fprintf(w, "<td><a href=\"%s\">%s</a></td>", url.String(), name)
-				} else {
-					fmt.Fprintf(w, "<td><a href=\"%s%s\">%s</a></td>", path, url.String(), name)
+				if path != "/" {
+					name = fmt.Sprintf("%s%s", path, name)
 				}
-				fmt.Fprintf(w, "<td>%s</td>", dirFile.ModTime().Format("01/02/2006 15:04:05 MST"))
-				fmt.Fprintf(w, "</tr>")
+				file := &fileInfo{
+					FileInfo: info,
+					url:      url.URL{Path: name},
+				}
+				fileInfos = append(fileInfos, file)
 			}
-			fmt.Fprintf(w, "</table>")
+			h.templates.ExecuteTemplate(w, "directory.html", fileInfos)
 		} else {
 			size := stat.Size()
 			buf, err := io.ReadAll(f)
@@ -82,7 +107,14 @@ func handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/", handle)
+	templates, err := template.New("templates").ParseGlob("templates/*")
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+	h := &handler{
+		templates,
+	}
+	http.HandleFunc("/", h.handle)
 	go func() { log.Fatal(http.ListenAndServe(":8080", nil)) }()
 	select {}
 }

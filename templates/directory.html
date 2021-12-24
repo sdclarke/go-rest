@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body {
+        background-color: black;
+        color: white;
+      }
+    </style>
+  </head>
+  <body>
+    <table>
+      <thead>
+        <tr>
+          <th>Size</th>
+          <th>Name</th>
+        </tr>
+      </thead>
+      <tr>
+        <td>-</td>
+        <td><a href="..">..</a></td>
+      </tr>
+      {{ range . }}
+      <tr>
+        <td>{{.Size}}</td>
+        <td><a href="{{.Url}}">{{.FixedName}}</a></td>
+      </tr>
+      {{ end }}
+    </table>
+  </body>
+</html>
